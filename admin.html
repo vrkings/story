@@ -473,6 +473,10 @@ document.getElementById('video-url').addEventListener('input', checkGenBtn);
 let storyNodes = [];
 let nodeCounter = 0;
 
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9а-яіїє]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'node_' + nodeCounter;
 }
@@ -536,7 +540,7 @@ function renderNodes() {
       + '<div class="node-fields">'
       // Label + ID
       + '<div class="node-field-row">'
-      + '<div><label>Назва сцени</label><input type="text" placeholder="Ліс вночі" value="' + (node.label || '') + '" oninput="storyNodes[' + idx + '].label=this.value; updateNodeId(' + idx + ')"></div>'
+      + '<div><label>Назва сцени</label><input type="text" placeholder="Ліс вночі" value="' + esc(node.label) + '" oninput="storyNodes[' + idx + '].label=this.value; updateNodeId(' + idx + ')"></div>'
       + '<div><label>ID (auto)</label><input type="text" placeholder="lisnochi" value="' + (node.id || '') + '" oninput="storyNodes[' + idx + '].id=this.value.trim()" style="font-family:monospace;font-size:.8rem"></div>'
       + '</div>'
       // URL
@@ -556,9 +560,9 @@ function renderNodes() {
       + '<label style="margin-bottom:.4rem">Варіанти вибору:</label>'
       + (node.choices || []).map((ch, ci) =>
         '<div class="choice-row">'
-        + '<input type="text" placeholder="Іконка" value="' + (ch.icon || '') + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].icon=this.value" style="max-width:52px;text-align:center">'
-        + '<input type="text" placeholder="Назва кнопки" value="' + (ch.label || '') + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].label=this.value">'
-        + '<input type="text" placeholder="Підпис (optional)" value="' + (ch.sub || '') + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].sub=this.value">'
+        + '<input type="text" placeholder="Іконка" value="' + esc(ch.icon) + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].icon=this.value" style="max-width:52px;text-align:center">'
+        + '<input type="text" placeholder="Назва кнопки" value="' + esc(ch.label) + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].label=this.value">'
+        + '<input type="text" placeholder="Підпис (optional)" value="' + esc(ch.sub) + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].sub=this.value">'
         + buildNextSelect('next_' + idx + '_' + ci, ch.next, node.id).replace('story-select', 'story-select').replace('<select ', '<select onchange="storyNodes[' + idx + '].choices[' + ci + '].next=this.value" ')
         + '<button class="btn-del-choice" onclick="removeChoice(' + idx + ',' + ci + ')" title="Видалити">×</button>'
         + '</div>'
@@ -611,8 +615,8 @@ function generateStoryLink() {
 
   const json = buildStoryJSON();
   const jsonStr = JSON.stringify(json);
-  // Standard UTF-8 base64 — same method as DeoVR links use
-  const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+  // UTF-8 safe base64 encode
+  const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode('0x' + p1)));
   const url = base + '/index.html?story=' + b64;
 
   document.getElementById('story-url-out').textContent = url;

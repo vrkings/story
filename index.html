@@ -385,11 +385,13 @@ const VIDEO_URL = getVideoURL();
 const VIDEO_TYPE = new URLSearchParams(window.location.search).get('type') || '360'; // '180' or '360'
 const IS_180 = VIDEO_TYPE === '180';
 
-if (!VIDEO_URL) {
+const HAS_STORY = new URLSearchParams(window.location.search).has('story');
+
+if (!VIDEO_URL && !HAS_STORY) {
   document.getElementById('nourl').classList.add('show');
   document.getElementById('splash').style.display = 'none';
   document.getElementById('example-url').textContent = window.location.origin + '/index.html?v=https://vz-XXXX.b-cdn.net/VIDEO_ID/playlist.m3u8';
-} else {
+} else if (VIDEO_URL) {
   // FIX: Build proper DeoVR JSON deep link with correct format flags
   const deovrJson = JSON.stringify({
     title: 'VR KINGS Video',

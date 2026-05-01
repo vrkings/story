@@ -469,26 +469,25 @@ document.getElementById('video-url').addEventListener('input', checkGenBtn);
 </body>
 </html>
 <script>
-// ── Story Builder JS ─────────────────────────────────────────────────────────
-let storyNodes = [];
-let nodeCounter = 0;
+// ── Story Builder ────────────────────────────────────────────────────────────
+var storyNodes = [];
+var nodeCounter = 0;
 
 function esc(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function slugify(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9а-яіїє]/gi,'_').replace(/_+/g,'_').replace(/^_|_$/g,'') || 'node_' + nodeCounter;
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'') || 'node_'+nodeCounter;
 }
 
 function addStoryNode(defaults) {
   nodeCounter++;
-  const id = 'node_' + nodeCounter;
-  const node = defaults || {
-    id, label: 'Сцена ' + nodeCounter, url: '', isEnding: false,
-    choiceAt: 15, countdown: 10, question: '', defaultNext: '',
-    choices: [{label:'',sub:'',icon:'👉',next:''},{label:'',sub:'',icon:'👈',next:''}],
-    endTitle: '', endDesc: ''
+  var node = defaults || {
+    id: 'node_'+nodeCounter, label: 'Сцена '+nodeCounter, url: '',
+    isEnding: false, choiceAt: 15, countdown: 10, question: 'Що далі?',
+    choices: [{label:'',sub:'',icon:'🔴',next:''},{label:'',sub:'',icon:'🔵',next:''}],
+    defaultNext: '', endTitle: '', endDesc: ''
   };
   storyNodes.push(node);
   renderNodes();
@@ -497,125 +496,130 @@ function addStoryNode(defaults) {
 function removeNode(idx) { storyNodes.splice(idx,1); renderNodes(); }
 function addChoice(idx) { storyNodes[idx].choices.push({label:'',sub:'',icon:'▶',next:''}); renderNodes(); }
 function removeChoice(idx,ci) { storyNodes[idx].choices.splice(ci,1); renderNodes(); }
+function toggleEnding(idx) { storyNodes[idx].isEnding = !storyNodes[idx].isEnding; renderNodes(); }
 
-// Update field WITHOUT re-rendering (preserves focus)
-function sf(idx, field, val) { storyNodes[idx][field] = val; }
-function sc(idx, ci, field, val) { storyNodes[idx].choices[ci][field] = val; }
-function toggleEnding(idx) {
-  storyNodes[idx].isEnding = !storyNodes[idx].isEnding;
-  renderNodes();
-}
-function updateId(idx) {
-  const labelEl = document.getElementById('node-label-' + idx);
-  if (labelEl) storyNodes[idx].id = slugify(labelEl.value) || 'node_' + (idx+1);
-}
+function sf(idx,field,val) { storyNodes[idx][field]=val; }
+function sc(idx,ci,field,val) { storyNodes[idx].choices[ci][field]=val; }
 
-function getNodeIds() { return storyNodes.map(n=>n.id).filter(Boolean); }
-
-function buildNextSelect(name, selectedVal, excludeId, onchangeCode) {
-  const ids = getNodeIds().filter(id => id !== excludeId);
-  let html = '<select class="story-select" style="font-size:.75rem;padding:.45rem .7rem" onchange="' + onchangeCode + '">';
-  html += '<option value="">— не вибрано —</option>';
-  ids.forEach(id => {
-    const n = storyNodes.find(x=>x.id===id);
-    const label = n ? (n.label||id) : id;
-    html += '<option value="'+id+'"'+(selectedVal===id?' selected':'')+'>'+esc(label)+' ('+id+')</option>';
+function buildSelect(selectedVal, excludeId, onchangeCode) {
+  var ids = storyNodes.map(function(n){return n.id;}).filter(function(id){return id && id!==excludeId;});
+  var html = '<select class="story-select" style="font-size:.75rem;padding:.4rem .6rem" onchange="'+onchangeCode+'">';
+  html += '<option value="">— куди веде —</option>';
+  ids.forEach(function(id) {
+    var n = storyNodes.find(function(x){return x.id===id;});
+    var label = n ? (n.label||id) : id;
+    html += '<option value="'+esc(id)+'"'+(selectedVal===id?' selected':'')+'>'+esc(label)+'</option>';
   });
   html += '</select>';
   return html;
 }
 
+function renderChoices(idx, choices, nodeId) {
+  var html = '';
+  (choices||[]).forEach(function(ch, ci) {
+    html += '<div style="background:rgba(0,0,0,.25);border-radius:8px;padding:.8rem;margin-top:.5rem">';
+    html += '<div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.5rem">';
+    html += '<input type="text" value="'+esc(ch.icon)+'" oninput="sc('+idx+','+ci+',\'icon\',this.value)" placeholder="😊" style="width:48px;flex-shrink:0;text-align:center;font-size:1.1rem;background:rgba(255,255,255,.05);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.5rem;color:var(--text);font-family:Outfit,sans-serif;outline:none">';
+    html += '<input type="text" value="'+esc(ch.label)+'" oninput="sc('+idx+','+ci+',\'label\',this.value)" placeholder="Назва кнопки (напр. Каріна)" style="flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.5rem;color:var(--text);font-family:Outfit,sans-serif;font-size:.88rem;outline:none">';
+    html += '<button onclick="removeChoice('+idx+','+ci+')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:1.1rem;padding:0 .3rem">×</button>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:.5rem">';
+    html += '<input type="text" value="'+esc(ch.sub)+'" oninput="sc('+idx+','+ci+',\'sub\',this.value)" placeholder="Підпис (необов\'язково)" style="flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.5rem;color:var(--text);font-family:Outfit,sans-serif;font-size:.8rem;outline:none">';
+    html += buildSelect(ch.next, nodeId, 'sc('+idx+','+ci+',\'next\',this.value)');
+    html += '</div>';
+    html += '</div>';
+  });
+  return html;
+}
+
 function renderNodes() {
-  const wrap = document.getElementById('story-nodes-wrap');
+  var wrap = document.getElementById('story-nodes-wrap');
+  if (!wrap) return;
   if (storyNodes.length === 0) {
-    wrap.innerHTML = '<p style="color:var(--muted);font-size:.8rem;text-align:center;padding:1rem 0;margin-bottom:1rem">Ще немає сцен. Натисни "Додати сцену" ↓</p>';
+    wrap.innerHTML = '<p style="color:var(--muted);font-size:.8rem;text-align:center;padding:1rem 0;margin-bottom:1rem">Натисни "Додати сцену" ↓</p>';
     return;
   }
-
-  wrap.innerHTML = storyNodes.map((node, idx) => {
-    const isFirst = idx === 0;
-    const isEnding = node.isEnding;
-    return `
-<div class="story-node ${isEnding?'node-is-ending':''}" id="snode-${idx}">
-  <div class="story-node-head">
-    <div class="node-badge">${isFirst?'★':(idx+1)}</div>
-    <div><div class="node-type-label">${isFirst?'Стартова сцена':(isEnding?'Кінцева сцена':'Сцена '+(idx+1))}</div></div>
-    <div class="node-id-display">${esc(node.id||'')}</div>
-    ${storyNodes.length>1?`<button class="btn-del-node" onclick="removeNode(${idx})" title="Видалити"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>`:''}
-  </div>
-  <div class="node-fields">
-    <div class="node-field-row">
-      <div><label>Назва сцени</label><input id="node-label-${idx}" type="text" placeholder="Ліс вночі" value="${esc(node.label)}" oninput="sf(${idx},'label',this.value)" onblur="updateId(${idx})"></div>
-      <div><label>ID (auto)</label><input type="text" placeholder="id" value="${esc(node.id)}" oninput="sf(${idx},'id',this.value)" style="font-family:monospace;font-size:.8rem"></div>
-    </div>
-    <div><label>URL відео (HLS або mp4)</label><input type="url" placeholder="https://vz-XXXX.b-cdn.net/.../playlist.m3u8" value="${esc(node.url)}" oninput="sf(${idx},'url',this.value)"></div>
-    <div class="toggle-row">
-      <span class="toggle-label">Це кінцева сцена (без вибору)?</span>
-      <label class="toggle-switch"><input type="checkbox" ${isEnding?'checked':''} onchange="toggleEnding(${idx})"><span class="slider"></span></label>
-    </div>
-    <div class="time-section node-field-row">
-      <div><label>Показати вибір на секунді</label><input type="number" min="1" value="${node.choiceAt??15}" oninput="sf(${idx},'choiceAt',+this.value)"></div>
-      <div><label>Таймер вибору (0 = без)</label><input type="number" min="0" value="${node.countdown??10}" oninput="sf(${idx},'countdown',+this.value)"></div>
-    </div>
-    <div class="choice-section"><label>Питання для глядача</label><input type="text" placeholder="Що робиш далі?" value="${esc(node.question)}" oninput="sf(${idx},'question',this.value)"></div>
-    <div class="choice-section">
-      <label style="margin-bottom:.4rem">Варіанти вибору:</label>
-      ${(node.choices||[]).map((ch,ci) => `
-      <div class="choice-row" style="flex-direction:column;gap:.5rem">
-        <div style="display:flex;gap:.5rem;align-items:center">
-          <input type="text" placeholder="😊" value="${esc(ch.icon)}" oninput="sc(${idx},${ci},'icon',this.value)" style="width:52px;flex-shrink:0;text-align:center;font-size:1.2rem">
-          <input type="text" placeholder="Назва кнопки (наприклад: Каріна)" value="${esc(ch.label)}" oninput="sc(${idx},${ci},'label',this.value)" style="flex:1">
-          <button class="btn-del-choice" onclick="removeChoice(${idx},${ci})" title="Видалити" style="flex-shrink:0">×</button>
-        </div>
-        <div style="display:flex;gap:.5rem">
-          <input type="text" placeholder="Підпис під кнопкою (необов'язково)" value="${esc(ch.sub)}" oninput="sc(${idx},${ci},'sub',this.value)" style="flex:1">
-          ${buildNextSelect('',''next_'+idx+'_'+ci+''',ch.next,node.id,'sc('+idx+','+ci+','next',this.value)')}
-        </div>
-      </div>`).join('')}
-      <button class="btn-add-choice" onclick="addChoice(${idx})">+ Варіант</button>
-    </div>
-    <div class="time-section">
-      <label>Авто-перехід (якщо таймер вийшов)</label>
-      ${buildNextSelect('',''defnext_'+idx+''',node.defaultNext,node.id,'sf('+idx+','defaultNext',this.value)')}
-    </div>
-    <div class="ending-fields">
-      <div><label>Заголовок фінальної карточки</label><input type="text" placeholder="Ти переміг!" value="${esc(node.endTitle)}" oninput="sf(${idx},'endTitle',this.value)"></div>
-      <div><label>Опис</label><input type="text" placeholder="Ти обрав правильний шлях..." value="${esc(node.endDesc)}" oninput="sf(${idx},'endDesc',this.value)"></div>
-    </div>
-  </div>
-</div>`;
-  }).join('');
+  var html = '';
+  storyNodes.forEach(function(node, idx) {
+    var isFirst = idx === 0;
+    var isEnding = node.isEnding;
+    html += '<div style="background:rgba(212,168,67,.04);border:1px solid rgba(212,168,67,.14);border-radius:12px;padding:1.4rem;margin-bottom:1rem">';
+    // Header
+    html += '<div style="display:flex;align-items:center;gap:.7rem;margin-bottom:1rem">';
+    html += '<div style="width:28px;height:28px;border-radius:50%;background:rgba(212,168,67,.12);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.65rem;color:var(--gold);font-weight:600">'+(isFirst?'★':(idx+1))+'</div>';
+    html += '<div style="font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">'+(isFirst?'Стартова сцена':(isEnding?'Кінцева сцена':'Сцена '+(idx+1)))+'</div>';
+    html += '<div style="margin-left:auto;font-size:.8rem;color:var(--gold2);font-family:monospace">'+esc(node.id||'')+'</div>';
+    if (storyNodes.length > 1) html += '<button onclick="removeNode('+idx+')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.85rem;padding:.2rem .4rem">✕</button>';
+    html += '</div>';
+    // Fields
+    html += '<div style="display:grid;gap:.8rem">';
+    // Label + ID
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">';
+    html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Назва сцени</label><input type="text" value="'+esc(node.label)+'" oninput="sf('+idx+',\'label\',this.value)" placeholder="Ліс вночі" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-family:Outfit,sans-serif;font-size:.88rem;outline:none"></div>';
+    html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">ID (auto)</label><input type="text" value="'+esc(node.id)+'" oninput="sf('+idx+',\'id\',this.value)" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-family:monospace;font-size:.8rem;outline:none"></div>';
+    html += '</div>';
+    // URL
+    html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">URL відео</label><input type="url" value="'+esc(node.url)+'" oninput="sf('+idx+',\'url\',this.value)" placeholder="https://vz-XXXX.b-cdn.net/.../playlist.m3u8" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-family:Outfit,sans-serif;font-size:.88rem;outline:none"></div>';
+    // Ending toggle
+    html += '<div style="display:flex;align-items:center;gap:.8rem;padding:.3rem 0"><span style="font-size:.82rem;color:var(--muted);flex:1">Це кінцева сцена (без вибору)?</span>';
+    html += '<label style="position:relative;width:36px;height:20px;flex-shrink:0"><input type="checkbox" '+(isEnding?'checked':'')+' onchange="toggleEnding('+idx+')" style="opacity:0;width:0;height:0"><span onclick="toggleEnding('+idx+')" style="position:absolute;inset:0;background:'+(isEnding?'rgba(212,168,67,.6)':'rgba(255,255,255,.1)')+';border-radius:99px;cursor:pointer;transition:.2s"></span><span onclick="toggleEnding('+idx+')" style="position:absolute;width:14px;height:14px;'+(isEnding?'left:19px':'left:3px')+';bottom:3px;background:#fff;border-radius:50%;cursor:pointer;transition:.2s"></span></label>';
+    html += '</div>';
+    if (!isEnding) {
+      // Timing
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">';
+      html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Показати вибір на секунді</label><input type="number" min="1" value="'+(node.choiceAt||15)+'" oninput="sf('+idx+',\'choiceAt\',+this.value)" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-family:Outfit,sans-serif;outline:none"></div>';
+      html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Таймер (0 = без)</label><input type="number" min="0" value="'+(node.countdown||0)+'" oninput="sf('+idx+',\'countdown\',+this.value)" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-family:Outfit,sans-serif;outline:none"></div>';
+      html += '</div>';
+      // Question
+      html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Питання для глядача</label><input type="text" value="'+esc(node.question)+'" oninput="sf('+idx+',\'question\',this.value)" placeholder="Що робиш далі?" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-family:Outfit,sans-serif;font-size:.88rem;outline:none"></div>';
+      // Choices
+      html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.3rem">Варіанти вибору:</label>';
+      html += renderChoices(idx, node.choices, node.id);
+      html += '<button onclick="addChoice('+idx+')" style="background:rgba(212,168,67,.07);border:1px dashed rgba(212,168,67,.25);color:var(--muted);border-radius:8px;padding:.5rem .9rem;font-size:.75rem;cursor:pointer;font-family:Outfit,sans-serif;margin-top:.5rem;width:100%">+ Варіант</button>';
+      html += '</div>';
+      // Default next
+      html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Авто-перехід (якщо таймер вийшов)</label>';
+      html += buildSelect(node.defaultNext, node.id, 'sf('+idx+',\'defaultNext\',this.value)');
+      html += '</div>';
+    } else {
+      // Ending fields
+      html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Заголовок фінальної карточки</label><input type="text" value="'+esc(node.endTitle)+'" oninput="sf('+idx+',\'endTitle\',this.value)" placeholder="Ти переміг!" style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-family:Outfit,sans-serif;font-size:.88rem;outline:none"></div>';
+      html += '<div><label style="display:block;font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Опис</label><input type="text" value="'+esc(node.endDesc)+'" oninput="sf('+idx+',\'endDesc\',this.value)" placeholder="Ти обрав правильний шлях..." style="width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(212,168,67,.2);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-family:Outfit,sans-serif;font-size:.88rem;outline:none"></div>';
+    }
+    html += '</div></div>';
+  });
+  wrap.innerHTML = html;
 }
 
 function buildStoryJSON() {
-  const nodes = {};
-  storyNodes.forEach(n => {
-    const id = n.id || ('node_'+Math.random().toString(36).slice(2,6));
-    const obj = {label:n.label, url:n.url};
+  var nodes = {};
+  storyNodes.forEach(function(n) {
+    var id = n.id || ('node_'+Math.random().toString(36).slice(2,6));
+    var obj = {label:n.label, url:n.url};
     if (n.isEnding) {
       obj.isEnding = true;
       obj.endTitle = n.endTitle||'Кінець';
       obj.endDesc = n.endDesc||'';
     } else {
-      obj.choiceAt = n.choiceAt??15;
-      obj.countdown = n.countdown??10;
+      obj.choiceAt = n.choiceAt||15;
+      obj.countdown = n.countdown||0;
       obj.question = n.question||'Що робиш далі?';
-      obj.choices = (n.choices||[]).filter(c=>c.label||c.next).map(c=>({label:c.label,sub:c.sub,icon:c.icon||'▶',next:c.next}));
+      obj.choices = (n.choices||[]).filter(function(c){return c.label||c.next;}).map(function(c){return {label:c.label,sub:c.sub,icon:c.icon||'▶',next:c.next};});
       if (n.defaultNext) obj.defaultNext = n.defaultNext;
     }
     nodes[id] = obj;
   });
-  return {start: storyNodes[0]?.id||'node_1', nodes};
+  return {start: (storyNodes[0]&&storyNodes[0].id)||'node_1', nodes:nodes};
 }
 
 function generateStoryLink() {
   if (storyNodes.length===0) { alert('Додай хоча б одну сцену!'); return; }
-  const base = (document.getElementById('base-url')?.value.trim()||'').replace(/\/$/,'');
+  var base = (document.getElementById('base-url').value.trim()||'').replace(/\/$/,'');
   if (!base) { alert('Введи URL плеєра у Step 1!'); return; }
-  const json = buildStoryJSON();
-  const jsonStr = JSON.stringify(json);
-  const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
-  const url = base + '/index.html?story=' + b64;
+  var json = buildStoryJSON();
+  var jsonStr = JSON.stringify(json);
+  var b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+  var url = base + '/index.html?story=' + b64;
   document.getElementById('story-url-out').textContent = url;
   document.getElementById('story-json-out').textContent = JSON.stringify(json,null,2);
   document.getElementById('story-open-btn').href = url;
@@ -626,18 +630,20 @@ function generateStoryLink() {
 }
 
 function copyStory(what) {
-  const text = what==='browser' ? window._storyGenUrl : window._storyGenJson;
+  var text = what==='browser' ? window._storyGenUrl : window._storyGenJson;
   if (!text) return;
-  navigator.clipboard.writeText(text).then(() => {
-    const id = what==='browser' ? 'story-url-out' : 'story-json-out';
-    const el = document.getElementById(id);
-    const orig = el.style.borderColor;
+  navigator.clipboard.writeText(text).then(function() {
+    var el = document.getElementById(what==='browser'?'story-url-out':'story-json-out');
+    var orig = el.style.borderColor;
     el.style.borderColor = 'var(--gold)';
-    setTimeout(()=>el.style.borderColor=orig, 1500);
+    setTimeout(function(){el.style.borderColor=orig;}, 1500);
   });
 }
 
-window.addEventListener('load', () => {
-  addStoryNode({id:'intro',label:'Вступ',url:'',isEnding:false,choiceAt:15,countdown:10,question:'Що далі?',choices:[{label:'',sub:'',icon:'🔴',next:''},{label:'',sub:'',icon:'🔵',next:''}],defaultNext:'',endTitle:'',endDesc:''});
+window.addEventListener('load', function() {
+  var saved = localStorage.getItem('vrkings_base');
+  if (saved) { document.getElementById('base-url').value=saved; updatePreview(saved); }
+  checkGenBtn();
+  addStoryNode({id:'intro',label:'Вступ',url:'',isEnding:false,choiceAt:15,countdown:0,question:'Що далі?',choices:[{label:'',sub:'',icon:'🔴',next:''},{label:'',sub:'',icon:'🔵',next:''}],defaultNext:'',endTitle:'',endDesc:''});
 });
 </script>

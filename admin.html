@@ -611,8 +611,8 @@ function generateStoryLink() {
 
   const json = buildStoryJSON();
   const jsonStr = JSON.stringify(json);
-  // UTF-8 safe base64 encode
-  const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode('0x' + p1)));
+  // Standard UTF-8 base64 — same method as DeoVR links use
+  const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
   const url = base + '/index.html?story=' + b64;
 
   document.getElementById('story-url-out').textContent = url;

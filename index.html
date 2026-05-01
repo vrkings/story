@@ -374,6 +374,7 @@ function getVideoURL() {
   const params = new URLSearchParams(window.location.search);
   let url = params.get('v');
   if (!url) return null;
+  if (!url) return null;
   if (url.includes('.m3u8') || url.includes('b-cdn.net')) return url;
   url = url.replace('www.dropbox.com', 'dl.dropboxusercontent.com');
   url = url.replace('?dl=0', '?dl=1').replace('&dl=0', '&dl=1');
@@ -395,7 +396,10 @@ if (!VIDEO_URL && !HAS_STORY) {
   // Story mode — customize splash, keep it visible so user clicks Watch
   try {
     const _sp = new URLSearchParams(window.location.search).get('story');
-    const _sd = JSON.parse(decodeURIComponent(escape(atob(_sp))));
+    const _b64 = _sp.replace(/-/g,'+').replace(/_/g,'/');
+    const _padded = _b64 + '=='.slice(0,(4-_b64.length%4)%4);
+    const _decoded = decodeURIComponent(Array.from(atob(_padded)).map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    const _sd = JSON.parse(_decoded);
     const _firstNode = _sd.nodes[_sd.start || Object.keys(_sd.nodes)[0]];
     if (_firstNode && _firstNode.label) {
       document.querySelector('.splash-title').innerHTML = 'Interactive<br/><em>360° Story</em>';
@@ -895,7 +899,13 @@ function loadStory() {
   const raw = params.get('story');
   if (!raw) return false;
   try {
-    storyData = JSON.parse(decodeURIComponent(escape(atob(raw))));
+    // Safari-safe base64 decode — pad and fix URL-safe chars
+    const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
+    const decoded = decodeURIComponent(Array.from(atob(padded)).map(c =>
+      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+    ).join(''));
+    storyData = JSON.parse(decoded);
     return true;
   } catch(e) { console.warn('Story parse error', e); return false; }
 }

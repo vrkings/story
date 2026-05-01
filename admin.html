@@ -474,48 +474,52 @@ let storyNodes = [];
 let nodeCounter = 0;
 
 function esc(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function slugify(s) {
-  return s.toLowerCase().replace(/[^a-z0-9а-яіїє]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'node_' + nodeCounter;
+  return (s || '').toLowerCase().replace(/[^a-z0-9а-яіїє]/gi,'_').replace(/_+/g,'_').replace(/^_|_$/g,'') || 'node_' + nodeCounter;
 }
 
 function addStoryNode(defaults) {
   nodeCounter++;
   const id = 'node_' + nodeCounter;
-  const node = defaults || { id, label: 'Сцена ' + nodeCounter, url: '', isEnding: false, choiceAt: 15, countdown: 10, question: '', choices: [{ label: '', sub: '', icon: '👉', next: '' }, { label: '', sub: '', icon: '👈', next: '' }], defaultNext: '', endTitle: '', endDesc: '' };
+  const node = defaults || {
+    id, label: 'Сцена ' + nodeCounter, url: '', isEnding: false,
+    choiceAt: 15, countdown: 10, question: '', defaultNext: '',
+    choices: [{label:'',sub:'',icon:'👉',next:''},{label:'',sub:'',icon:'👈',next:''}],
+    endTitle: '', endDesc: ''
+  };
   storyNodes.push(node);
   renderNodes();
 }
 
-function removeNode(idx) {
-  storyNodes.splice(idx, 1);
+function removeNode(idx) { storyNodes.splice(idx,1); renderNodes(); }
+function addChoice(idx) { storyNodes[idx].choices.push({label:'',sub:'',icon:'▶',next:''}); renderNodes(); }
+function removeChoice(idx,ci) { storyNodes[idx].choices.splice(ci,1); renderNodes(); }
+
+// Update field WITHOUT re-rendering (preserves focus)
+function sf(idx, field, val) { storyNodes[idx][field] = val; }
+function sc(idx, ci, field, val) { storyNodes[idx].choices[ci][field] = val; }
+function toggleEnding(idx) {
+  storyNodes[idx].isEnding = !storyNodes[idx].isEnding;
   renderNodes();
 }
-
-function addChoice(nodeIdx) {
-  storyNodes[nodeIdx].choices.push({ label: '', sub: '', icon: '▶', next: '' });
-  renderNodes();
+function updateId(idx) {
+  const labelEl = document.getElementById('node-label-' + idx);
+  if (labelEl) storyNodes[idx].id = slugify(labelEl.value) || 'node_' + (idx+1);
 }
 
-function removeChoice(nodeIdx, choiceIdx) {
-  storyNodes[nodeIdx].choices.splice(choiceIdx, 1);
-  renderNodes();
-}
+function getNodeIds() { return storyNodes.map(n=>n.id).filter(Boolean); }
 
-function getNodeIds() {
-  return storyNodes.map(n => n.id).filter(Boolean);
-}
-
-function buildNextSelect(name, selectedVal, excludeId) {
+function buildNextSelect(name, selectedVal, excludeId, onchangeCode) {
   const ids = getNodeIds().filter(id => id !== excludeId);
-  let html = '<select class="story-select" name="' + name + '" style="font-size:.75rem;padding:.45rem .7rem">';
+  let html = '<select class="story-select" style="font-size:.75rem;padding:.45rem .7rem" onchange="' + onchangeCode + '">';
   html += '<option value="">— не вибрано —</option>';
   ids.forEach(id => {
-    const n = storyNodes.find(x => x.id === id);
-    const label = n ? (n.label || id) : id;
-    html += '<option value="' + id + '"' + (selectedVal === id ? ' selected' : '') + '>' + label + ' (' + id + ')</option>';
+    const n = storyNodes.find(x=>x.id===id);
+    const label = n ? (n.label||id) : id;
+    html += '<option value="'+id+'"'+(selectedVal===id?' selected':'')+'>'+esc(label)+' ('+id+')</option>';
   });
   html += '</select>';
   return html;
@@ -527,124 +531,113 @@ function renderNodes() {
     wrap.innerHTML = '<p style="color:var(--muted);font-size:.8rem;text-align:center;padding:1rem 0;margin-bottom:1rem">Ще немає сцен. Натисни "Додати сцену" ↓</p>';
     return;
   }
+
   wrap.innerHTML = storyNodes.map((node, idx) => {
     const isFirst = idx === 0;
     const isEnding = node.isEnding;
-    return '<div class="story-node ' + (isEnding ? 'node-is-ending' : '') + '" id="snode-' + idx + '">'
-      + '<div class="story-node-head">'
-      + '<div class="node-badge">' + (isFirst ? '★' : (idx + 1)) + '</div>'
-      + '<div><div class="node-type-label">' + (isFirst ? 'Стартова сцена' : (isEnding ? 'Кінцева сцена' : 'Сцена ' + (idx + 1))) + '</div></div>'
-      + '<div class="node-id-display">' + (node.id || '?') + '</div>'
-      + (storyNodes.length > 1 ? '<button class="btn-del-node" onclick="removeNode(' + idx + ')" title="Видалити"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>' : '')
-      + '</div>'
-      + '<div class="node-fields">'
-      // Label + ID
-      + '<div class="node-field-row">'
-      + '<div><label>Назва сцени</label><input type="text" placeholder="Ліс вночі" value="' + esc(node.label) + '" oninput="storyNodes[' + idx + '].label=this.value; updateNodeId(' + idx + ')"></div>'
-      + '<div><label>ID (auto)</label><input type="text" placeholder="lisnochi" value="' + (node.id || '') + '" oninput="storyNodes[' + idx + '].id=this.value.trim()" style="font-family:monospace;font-size:.8rem"></div>'
-      + '</div>'
-      // URL
-      + '<div><label>URL відео (HLS або mp4)</label><input type="url" placeholder="https://vz-XXXX.b-cdn.net/.../playlist.m3u8" value="' + (node.url || '') + '" oninput="storyNodes[' + idx + '].url=this.value"></div>'
-      // Is Ending toggle
-      + '<div class="toggle-row"><span class="toggle-label">Це кінцева сцена (без вибору)?</span>'
-      + '<label class="toggle-switch"><input type="checkbox"' + (isEnding ? ' checked' : '') + ' onchange="storyNodes[' + idx + '].isEnding=this.checked; renderNodes()"><span class="slider"></span></label></div>'
-      // Timing (hidden for endings)
-      + '<div class="time-section node-field-row">'
-      + '<div><label>Показати вибір на секунді</label><input type="number" min="1" value="' + (node.choiceAt ?? 15) + '" oninput="storyNodes[' + idx + '].choiceAt=+this.value" placeholder="15"></div>'
-      + '<div><label>Таймер вибору (0 = без)</label><input type="number" min="0" value="' + (node.countdown ?? 10) + '" oninput="storyNodes[' + idx + '].countdown=+this.value" placeholder="10"></div>'
-      + '</div>'
-      // Question (hidden for endings)
-      + '<div class="choice-section"><label>Питання для глядача</label><input type="text" placeholder="Що робиш далі?" value="' + (node.question || '') + '" oninput="storyNodes[' + idx + '].question=this.value"></div>'
-      // Choices (hidden for endings)
-      + '<div class="choice-section">'
-      + '<label style="margin-bottom:.4rem">Варіанти вибору:</label>'
-      + (node.choices || []).map((ch, ci) =>
-        '<div class="choice-row">'
-        + '<input type="text" placeholder="Іконка" value="' + esc(ch.icon) + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].icon=this.value" style="max-width:52px;text-align:center">'
-        + '<input type="text" placeholder="Назва кнопки" value="' + esc(ch.label) + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].label=this.value">'
-        + '<input type="text" placeholder="Підпис (optional)" value="' + esc(ch.sub) + '" oninput="storyNodes[' + idx + '].choices[' + ci + '].sub=this.value">'
-        + buildNextSelect('next_' + idx + '_' + ci, ch.next, node.id).replace('story-select', 'story-select').replace('<select ', '<select onchange="storyNodes[' + idx + '].choices[' + ci + '].next=this.value" ')
-        + '<button class="btn-del-choice" onclick="removeChoice(' + idx + ',' + ci + ')" title="Видалити">×</button>'
-        + '</div>'
-      ).join('')
-      + '<button class="btn-add-choice" onclick="addChoice(' + idx + ')">+ Варіант</button>'
-      + '</div>'
-      // Default next (hidden for endings)
-      + '<div class="time-section"><label>Авто-перехід (якщо таймер вийшов або немає вибору)</label>' + buildNextSelect('defnext_' + idx, node.defaultNext, node.id).replace('<select ', '<select onchange="storyNodes[' + idx + '].defaultNext=this.value" ') + '</div>'
-      // Ending fields
-      + '<div class="ending-fields">'
-      + '<div><label>Заголовок фінальної карточки</label><input type="text" placeholder="Ти переміг!" value="' + (node.endTitle || '') + '" oninput="storyNodes[' + idx + '].endTitle=this.value"></div>'
-      + '<div><label>Опис / текст під заголовком</label><input type="text" placeholder="Ти обрав правильний шлях..." value="' + (node.endDesc || '') + '" oninput="storyNodes[' + idx + '].endDesc=this.value"></div>'
-      + '</div>'
-      + '</div></div>';
+    return `
+<div class="story-node ${isEnding?'node-is-ending':''}" id="snode-${idx}">
+  <div class="story-node-head">
+    <div class="node-badge">${isFirst?'★':(idx+1)}</div>
+    <div><div class="node-type-label">${isFirst?'Стартова сцена':(isEnding?'Кінцева сцена':'Сцена '+(idx+1))}</div></div>
+    <div class="node-id-display">${esc(node.id||'')}</div>
+    ${storyNodes.length>1?`<button class="btn-del-node" onclick="removeNode(${idx})" title="Видалити"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>`:''}
+  </div>
+  <div class="node-fields">
+    <div class="node-field-row">
+      <div><label>Назва сцени</label><input id="node-label-${idx}" type="text" placeholder="Ліс вночі" value="${esc(node.label)}" oninput="sf(${idx},'label',this.value)" onblur="updateId(${idx})"></div>
+      <div><label>ID (auto)</label><input type="text" placeholder="id" value="${esc(node.id)}" oninput="sf(${idx},'id',this.value)" style="font-family:monospace;font-size:.8rem"></div>
+    </div>
+    <div><label>URL відео (HLS або mp4)</label><input type="url" placeholder="https://vz-XXXX.b-cdn.net/.../playlist.m3u8" value="${esc(node.url)}" oninput="sf(${idx},'url',this.value)"></div>
+    <div class="toggle-row">
+      <span class="toggle-label">Це кінцева сцена (без вибору)?</span>
+      <label class="toggle-switch"><input type="checkbox" ${isEnding?'checked':''} onchange="toggleEnding(${idx})"><span class="slider"></span></label>
+    </div>
+    <div class="time-section node-field-row">
+      <div><label>Показати вибір на секунді</label><input type="number" min="1" value="${node.choiceAt??15}" oninput="sf(${idx},'choiceAt',+this.value)"></div>
+      <div><label>Таймер вибору (0 = без)</label><input type="number" min="0" value="${node.countdown??10}" oninput="sf(${idx},'countdown',+this.value)"></div>
+    </div>
+    <div class="choice-section"><label>Питання для глядача</label><input type="text" placeholder="Що робиш далі?" value="${esc(node.question)}" oninput="sf(${idx},'question',this.value)"></div>
+    <div class="choice-section">
+      <label style="margin-bottom:.4rem">Варіанти вибору:</label>
+      ${(node.choices||[]).map((ch,ci) => `
+      <div class="choice-row" style="flex-direction:column;gap:.5rem">
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <input type="text" placeholder="😊" value="${esc(ch.icon)}" oninput="sc(${idx},${ci},'icon',this.value)" style="width:52px;flex-shrink:0;text-align:center;font-size:1.2rem">
+          <input type="text" placeholder="Назва кнопки (наприклад: Каріна)" value="${esc(ch.label)}" oninput="sc(${idx},${ci},'label',this.value)" style="flex:1">
+          <button class="btn-del-choice" onclick="removeChoice(${idx},${ci})" title="Видалити" style="flex-shrink:0">×</button>
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <input type="text" placeholder="Підпис під кнопкою (необов'язково)" value="${esc(ch.sub)}" oninput="sc(${idx},${ci},'sub',this.value)" style="flex:1">
+          ${buildNextSelect('',''next_'+idx+'_'+ci+''',ch.next,node.id,'sc('+idx+','+ci+','next',this.value)')}
+        </div>
+      </div>`).join('')}
+      <button class="btn-add-choice" onclick="addChoice(${idx})">+ Варіант</button>
+    </div>
+    <div class="time-section">
+      <label>Авто-перехід (якщо таймер вийшов)</label>
+      ${buildNextSelect('',''defnext_'+idx+''',node.defaultNext,node.id,'sf('+idx+','defaultNext',this.value)')}
+    </div>
+    <div class="ending-fields">
+      <div><label>Заголовок фінальної карточки</label><input type="text" placeholder="Ти переміг!" value="${esc(node.endTitle)}" oninput="sf(${idx},'endTitle',this.value)"></div>
+      <div><label>Опис</label><input type="text" placeholder="Ти обрав правильний шлях..." value="${esc(node.endDesc)}" oninput="sf(${idx},'endDesc',this.value)"></div>
+    </div>
+  </div>
+</div>`;
   }).join('');
-}
-
-function updateNodeId(idx) {
-  const node = storyNodes[idx];
-  node.id = slugify(node.label) || 'node_' + (idx + 1);
-  renderNodes();
 }
 
 function buildStoryJSON() {
   const nodes = {};
   storyNodes.forEach(n => {
-    const id = n.id || ('node_' + Math.random().toString(36).slice(2, 6));
-    const obj = { label: n.label, url: n.url };
+    const id = n.id || ('node_'+Math.random().toString(36).slice(2,6));
+    const obj = {label:n.label, url:n.url};
     if (n.isEnding) {
       obj.isEnding = true;
-      obj.endTitle = n.endTitle || 'Кінець';
-      obj.endDesc = n.endDesc || '';
+      obj.endTitle = n.endTitle||'Кінець';
+      obj.endDesc = n.endDesc||'';
     } else {
-      obj.choiceAt = n.choiceAt ?? 15;
-      obj.countdown = n.countdown ?? 10;
-      obj.question = n.question || 'Що робиш далі?';
-      obj.choices = (n.choices || []).filter(c => c.label || c.next).map(c => ({ label: c.label, sub: c.sub, icon: c.icon || '▶', next: c.next }));
+      obj.choiceAt = n.choiceAt??15;
+      obj.countdown = n.countdown??10;
+      obj.question = n.question||'Що робиш далі?';
+      obj.choices = (n.choices||[]).filter(c=>c.label||c.next).map(c=>({label:c.label,sub:c.sub,icon:c.icon||'▶',next:c.next}));
       if (n.defaultNext) obj.defaultNext = n.defaultNext;
     }
     nodes[id] = obj;
   });
-  const startId = storyNodes[0]?.id || 'node_1';
-  return { start: startId, nodes };
+  return {start: storyNodes[0]?.id||'node_1', nodes};
 }
 
 function generateStoryLink() {
-  if (storyNodes.length === 0) { alert('Додай хоча б одну сцену!'); return; }
-  const base = (document.getElementById('base-url')?.value.trim() || '').replace(/\/$/, '');
+  if (storyNodes.length===0) { alert('Додай хоча б одну сцену!'); return; }
+  const base = (document.getElementById('base-url')?.value.trim()||'').replace(/\/$/,'');
   if (!base) { alert('Введи URL плеєра у Step 1!'); return; }
-
   const json = buildStoryJSON();
   const jsonStr = JSON.stringify(json);
-  // UTF-8 safe base64 encode
-  const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode('0x' + p1)));
+  const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
   const url = base + '/index.html?story=' + b64;
-
   document.getElementById('story-url-out').textContent = url;
-  document.getElementById('story-json-out').textContent = JSON.stringify(json, null, 2);
+  document.getElementById('story-json-out').textContent = JSON.stringify(json,null,2);
   document.getElementById('story-open-btn').href = url;
   document.getElementById('story-result').style.display = 'block';
-  document.getElementById('story-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
+  document.getElementById('story-result').scrollIntoView({behavior:'smooth',block:'start'});
   window._storyGenUrl = url;
   window._storyGenJson = jsonStr;
 }
 
 function copyStory(what) {
-  const text = what === 'browser' ? window._storyGenUrl : window._storyGenJson;
+  const text = what==='browser' ? window._storyGenUrl : window._storyGenJson;
   if (!text) return;
   navigator.clipboard.writeText(text).then(() => {
-    const id = what === 'browser' ? 'story-url-out' : 'story-json-out';
+    const id = what==='browser' ? 'story-url-out' : 'story-json-out';
     const el = document.getElementById(id);
     const orig = el.style.borderColor;
     el.style.borderColor = 'var(--gold)';
-    setTimeout(() => el.style.borderColor = orig, 1500);
+    setTimeout(()=>el.style.borderColor=orig, 1500);
   });
 }
 
-// Init with one example node
 window.addEventListener('load', () => {
-  // Restore saved base URL (already handled by original script)
-  // Add a starter node
-  addStoryNode({ id: 'intro', label: 'Вступ', url: '', isEnding: false, choiceAt: 15, countdown: 10, question: 'Що ти хочеш зробити далі?', choices: [{ label: 'Перший варіант', sub: '', icon: '🔴', next: '' }, { label: 'Другий варіант', sub: '', icon: '🔵', next: '' }], defaultNext: '', endTitle: '', endDesc: '' });
+  addStoryNode({id:'intro',label:'Вступ',url:'',isEnding:false,choiceAt:15,countdown:10,question:'Що далі?',choices:[{label:'',sub:'',icon:'🔴',next:''},{label:'',sub:'',icon:'🔵',next:''}],defaultNext:'',endTitle:'',endDesc:''});
 });
 </script>

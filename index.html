@@ -391,6 +391,20 @@ if (!VIDEO_URL && !HAS_STORY) {
   document.getElementById('nourl').classList.add('show');
   document.getElementById('splash').style.display = 'none';
   document.getElementById('example-url').textContent = window.location.origin + '/index.html?v=https://vz-XXXX.b-cdn.net/VIDEO_ID/playlist.m3u8';
+} else if (HAS_STORY) {
+  // Story mode — customize splash, keep it visible so user clicks Watch
+  try {
+    const _sp = new URLSearchParams(window.location.search).get('story');
+    const _sd = JSON.parse(decodeURIComponent(escape(atob(_sp))));
+    const _firstNode = _sd.nodes[_sd.start || Object.keys(_sd.nodes)[0]];
+    if (_firstNode && _firstNode.label) {
+      document.querySelector('.splash-title').innerHTML = 'Interactive<br/><em>360° Story</em>';
+      document.querySelector('.splash-sub').textContent = 'Натисни Watch щоб почати інтерактивне кіно';
+    }
+    // Hide DeoVR button in story mode
+    document.querySelector('.btn-divider') && (document.querySelector('.btn-divider').style.display = 'none');
+    document.querySelector('.btn-with-desc:last-child') && (document.querySelector('.btn-with-desc:last-child').style.display = 'none');
+  } catch(e) {}
 } else if (VIDEO_URL) {
   // FIX: Build proper DeoVR JSON deep link with correct format flags
   const deovrJson = JSON.stringify({
@@ -1020,24 +1034,39 @@ window.launch = function() {
   if (loadStory() && storyData) {
     document.getElementById('splash').classList.add('hide');
     document.getElementById('loading').classList.add('on');
+
+    // Init Three.js — but stop it from loading VIDEO_URL (there is none)
     initThree();
+    // Immediately stop the video initThree created (it has no src in story mode)
+    if (video) { video.pause(); video.src = ''; }
+
     const startId = storyData.start || Object.keys(storyData.nodes)[0];
     const firstNode = storyData.nodes[startId];
-    const waitVideo = setInterval(() => {
-      if (typeof video !== 'undefined' && video) {
-        clearInterval(waitVideo);
-        video.loop = false;
-        storyLoadVideoForNode(firstNode);
-        video.addEventListener('canplay', () => {
-          document.getElementById('loading').classList.add('fade');
-          setTimeout(() => document.getElementById('loading').classList.remove('on','fade'), 700);
-          document.getElementById('canvas').classList.add('active');
-          document.getElementById('topbar').classList.add('show');
-          document.getElementById('hud').classList.add('show');
-          playerActive = true; showHint();
-        }, { once: true });
-      }
-    }, 30);
+
+    // Load first story node
+    storyLoadVideoForNode(firstNode);
+
+    // Show player UI once video can play
+    const onReady = () => {
+      document.getElementById('loading').classList.add('fade');
+      setTimeout(() => document.getElementById('loading').classList.remove('on','fade'), 700);
+      document.getElementById('canvas').classList.add('active');
+      document.getElementById('topbar').classList.add('show');
+      document.getElementById('hud').classList.add('show');
+      playerActive = true;
+      showHint();
+    };
+
+    // canplay may already have fired — check readyState
+    if (video && video.readyState >= 3) {
+      onReady();
+    } else if (video) {
+      video.addEventListener('canplay', onReady, { once: true });
+      // Fallback timeout in case canplay doesn't fire
+      setTimeout(() => {
+        if (!playerActive) onReady();
+      }, 5000);
+    }
   } else {
     if (_origLaunchFn) _origLaunchFn();
   }

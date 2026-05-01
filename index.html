@@ -900,8 +900,9 @@ function loadStory() {
   if (!raw) return false;
   try {
     // Safari-safe base64 decode — pad and fix URL-safe chars
-    // Decode: reverse of encodeURIComponent-based btoa
-    const decoded = decodeURIComponent(atob(raw));
+    // Robust UTF-8 base64 decode
+    const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+    const decoded = new TextDecoder().decode(bytes);
     storyData = JSON.parse(decoded);
     return true;
   } catch(e) { console.warn('Story parse error', e); return false; }

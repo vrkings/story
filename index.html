@@ -79,7 +79,7 @@ body::before{content:'';position:fixed;inset:0;z-index:999;pointer-events:none;o
 .ptrack{width:100%;height:3px;background:rgba(255,255,255,.08);border-radius:2px;cursor:pointer;margin-bottom:1rem;transition:height .15s,margin-top .15s;}
 .ptrack:hover{height:5px;margin-top:-2px;}
 .pfill{height:100%;border-radius:2px;width:0%;background:linear-gradient(90deg,var(--gold),var(--gold2));pointer-events:none;transition:width .25s linear;}
-.ctrlrow{display:flex;align-items:center;gap:.7rem;}
+.ctrlrow{display:flex;align-items:center;gap:.5rem;flex-wrap:nowrap;overflow:visible;}
 .cb{background:rgba(212,168,67,.07);border:1px solid rgba(212,168,67,.17);color:var(--gold);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .2s,transform .15s;}
 .cb:hover{background:rgba(212,168,67,.2);transform:scale(1.08);}
 .cb svg{width:15px;height:15px;}
@@ -87,7 +87,7 @@ body::before{content:'';position:fixed;inset:0;z-index:999;pointer-events:none;o
 .tbox{font-size:.77rem;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap;}
 .tbox b{color:var(--text);font-weight:400;}
 .sp{flex:1;}
-.vrow{display:flex;align-items:center;gap:.45rem;}
+.vrow{display:flex;align-items:center;gap:.45rem;} @media(max-width:480px){input#vol{display:none;}} 
 input#vol{-webkit-appearance:none;appearance:none;width:68px;height:2px;background:rgba(255,255,255,.14);outline:none;cursor:pointer;border-radius:2px;}
 input#vol::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:var(--gold);cursor:pointer;}
 /* Browser tips */
@@ -122,7 +122,7 @@ input#vol::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;b
 .qopt.warn-4k{position:relative;}
 .qopt.warn-4k::after{content:'⚠ may buffer';font-size:.58rem;color:rgba(212,168,67,.5);display:block;margin-top:.1rem;}
 /* Zoom controls */
-#zoom-wrap{display:flex;align-items:center;gap:.2rem;}
+#zoom-wrap{display:flex;align-items:center;gap:.2rem;flex-shrink:0;}
 .cb-sm{background:rgba(212,168,67,.07);border:1px solid rgba(212,168,67,.17);color:var(--gold);width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .2s,transform .15s;font-size:1rem;line-height:1;font-weight:300;}
 .cb-sm:hover{background:rgba(212,168,67,.2);transform:scale(1.08);}
 .zoom-val{font-size:.62rem;color:var(--muted);letter-spacing:.06em;min-width:2.4rem;text-align:center;font-variant-numeric:tabular-nums;}
@@ -327,7 +327,7 @@ input#vol::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;b
   <div class="story-card">
     <div class="story-tag">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 8v4l3 3"/></svg>
-      Твій вибір
+      YOUR CHOICE
     </div>
     <div class="story-question" id="story-question">Що ти хочеш зробити?</div>
     <div class="story-choices" id="story-choices"></div>
@@ -403,7 +403,7 @@ if (!VIDEO_URL && !HAS_STORY) {
     const _firstNode = _sd.nodes[_sd.start || Object.keys(_sd.nodes)[0]];
     if (_firstNode && _firstNode.label) {
       document.querySelector('.splash-title').innerHTML = 'Interactive<br/><em>360° Story</em>';
-      document.querySelector('.splash-sub').textContent = 'Натисни Watch щоб почати інтерактивне кіно';
+      document.querySelector('.splash-sub').textContent = 'Press Watch to start the interactive story';
     }
     // Hide DeoVR button in story mode
     document.querySelector('.btn-divider') && (document.querySelector('.btn-divider').style.display = 'none');
@@ -894,9 +894,9 @@ function loadStory() {
   const raw = params.get('story');
   if (!raw) return false;
   try {
-    // URLSearchParams converts + to space — restore before atob
-    const fixed = raw.replace(/ /g, '+');
-    const pct = atob(fixed).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('');
+    // Decode: admin encodes with btoa(unescape(encodeURIComponent(json)))
+    // So each byte in atob(raw) is a percent-encoded UTF-8 byte
+    const pct = atob(raw).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('');
     storyData = JSON.parse(decodeURIComponent(pct));
     return true;
   } catch(e) { console.warn('Story parse error', e); return false; }

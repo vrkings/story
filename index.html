@@ -392,23 +392,6 @@ if (!VIDEO_URL && !HAS_STORY) {
   document.getElementById('nourl').classList.add('show');
   document.getElementById('splash').style.display = 'none';
   document.getElementById('example-url').textContent = window.location.origin + '/index.html?v=https://vz-XXXX.b-cdn.net/VIDEO_ID/playlist.m3u8';
-} else if (HAS_STORY) {
-  // Story mode — customize splash, keep it visible so user clicks Watch
-  try {
-    const _sp = new URLSearchParams(window.location.search).get('story');
-    const _b64 = _sp.replace(/-/g,'+').replace(/_/g,'/');
-    const _padded = _b64 + '=='.slice(0,(4-_b64.length%4)%4);
-    const _decoded = decodeURIComponent(Array.from(atob(_padded)).map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-    const _sd = JSON.parse(_decoded);
-    const _firstNode = _sd.nodes[_sd.start || Object.keys(_sd.nodes)[0]];
-    if (_firstNode && _firstNode.label) {
-      document.querySelector('.splash-title').innerHTML = 'Interactive<br/><em>360° Story</em>';
-      document.querySelector('.splash-sub').textContent = 'Натисни Watch щоб почати інтерактивне кіно';
-    }
-    // Hide DeoVR button in story mode
-    document.querySelector('.btn-divider') && (document.querySelector('.btn-divider').style.display = 'none');
-    document.querySelector('.btn-with-desc:last-child') && (document.querySelector('.btn-with-desc:last-child').style.display = 'none');
-  } catch(e) {}
 } else if (VIDEO_URL) {
   // FIX: Build proper DeoVR JSON deep link with correct format flags
   const deovrJson = JSON.stringify({
@@ -493,14 +476,9 @@ function initThree() {
 
   let hlsInstance = null;
 
-  if (VIDEO_URL.includes('.m3u8')) {
+  if (VIDEO_URL && VIDEO_URL.includes('.m3u8')) {
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // ── Safari / iOS native HLS ──────────────────────────────────────────
-      // Safari picks quality itself. Best we can do: load, then on manifest
-      // parsed force highest rendition via textTracks hack isn't available,
-      // but we CAN detect what resolution is actually playing and show it.
       video.src = VIDEO_URL;
-      // Poll actual video dimensions once playing — tells us real quality
       video.addEventListener('playing', updateNativeQualityBadge);
       video.addEventListener('resize',  updateNativeQualityBadge);
     } else if (Hls.isSupported()) {
@@ -533,7 +511,7 @@ function initThree() {
         updateHlsQualityBadge(hlsInstance, data.level);
       });
     }
-  } else {
+  } else if (VIDEO_URL) {
     video.src = VIDEO_URL;
     video.load();
     video.addEventListener('playing', updateNativeQualityBadge);
@@ -888,133 +866,237 @@ window.addEventListener('mousedown', e => {
 </html>
 <script>
 // ── Interactive Story Engine ─────────────────────────────────────────────────
-let storyData = null;
-let currentNodeId = null;
-let storyChoiceTimer = null;
-let storyTimeHandler = null;
-let storyEndedHandler = null;
 
-function loadStory() {
-  const params = new URLSearchParams(window.location.search);
-  const raw = params.get('story');
-  if (!raw) return false;
+var storyData = null;
+var storyTimeHandler = null;
+var storyEndedHandler = null;
+var storyChoiceTimer = null;
+
+function storyDecode(raw) {
+  // Works in all browsers — standard base64 with UTF-8 support
   try {
-    // Safari-safe base64 decode — pad and fix URL-safe chars
-    // Robust UTF-8 base64 decode
-    const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
-    const decoded = new TextDecoder().decode(bytes);
-    storyData = JSON.parse(decoded);
-    return true;
-  } catch(e) { console.warn('Story parse error', e); return false; }
+    return JSON.parse(decodeURIComponent(escape(atob(raw))));
+  } catch(e1) {
+    try {
+      var bytes = Uint8Array.from(atob(raw), function(c){ return c.charCodeAt(0); });
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch(e2) {
+      console.error('Story decode failed', e1, e2);
+      return null;
+    }
+  }
 }
 
-function storyLoadVideoForNode(node) {
+function storyInit() {
+  var raw = new URLSearchParams(window.location.search).get('story');
+  if (!raw) return false;
+  storyData = storyDecode(raw);
+  return !!storyData;
+}
+
+function storyRun() {
+  if (!storyInit()) return false;
+
+  // Hide DeoVR button — not relevant for story mode
+  var divider = document.querySelector('.btn-divider');
+  var deovr = document.querySelector('.btn-with-desc:last-child');
+  if (divider) divider.style.display = 'none';
+  if (deovr) deovr.style.display = 'none';
+
+  // Update splash text
+  var title = document.querySelector('.splash-title');
+  var sub = document.querySelector('.splash-sub');
+  if (title) title.innerHTML = 'Interactive<br/><em>360° Story</em>';
+  if (sub) sub.textContent = 'Натисни Watch щоб почати';
+
+  return true;
+}
+
+// Check on page load
+var IS_STORY = storyRun();
+
+// Override launch() for story mode
+var _origLaunch = window.launch;
+window.launch = function() {
+  if (!IS_STORY) { _origLaunch(); return; }
+
+  document.getElementById('splash').classList.add('hide');
+  document.getElementById('loading').classList.add('on');
+
+  // Init Three.js (no VIDEO_URL in story mode)
+  initThree();
+
+  // Remove default canplay handler — we control it
+  video.removeEventListener('canplay', onCanPlay);
+  video.loop = false;
+
+  var startId = storyData.start || Object.keys(storyData.nodes)[0];
+  storyPlayNode(storyData.nodes[startId]);
+};
+
+function storyShowPlayer() {
+  var ld = document.getElementById('loading');
+  ld.classList.add('fade');
+  setTimeout(function(){ ld.classList.remove('on','fade'); }, 700);
+  document.getElementById('canvas').classList.add('active');
+  document.getElementById('topbar').classList.add('show');
+  document.getElementById('hud').classList.add('show');
+  playerActive = true;
+  showHint();
+}
+
+function storyPlayNode(node) {
   if (!node || !node.url) return;
-  const url = node.url;
+
+  // Clear previous listeners
   if (storyTimeHandler) { video.removeEventListener('timeupdate', storyTimeHandler); storyTimeHandler = null; }
   if (storyEndedHandler) { video.removeEventListener('ended', storyEndedHandler); storyEndedHandler = null; }
-  clearStoryTimer();
+  if (storyChoiceTimer) { clearInterval(storyChoiceTimer); storyChoiceTimer = null; }
   if (window._storyHls) { window._storyHls.destroy(); window._storyHls = null; }
-  video.pause(); video.src = ''; video.loop = false;
 
-  if (url.includes('.m3u8')) {
+  video.pause();
+  video.src = '';
+  video.loop = false;
+
+  var url = node.url;
+
+  // Load video via HLS or native
+  if (url.indexOf('.m3u8') !== -1) {
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = url;
     } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-      window._storyHls = new Hls({ startLevel: -1, abrEwmaDefaultEstimate: 20000000, capLevelToPlayerSize: false });
-      window._storyHls.loadSource(url); window._storyHls.attachMedia(video);
-      window._storyHls.on(Hls.Events.MANIFEST_PARSED, () => { window._storyHls.currentLevel = window._storyHls.levels.length - 1; buildQualityMenu(window._storyHls); document.getElementById('qual-btn').style.display = 'flex'; document.getElementById('quality-badge').classList.add('show'); });
-      window._storyHls.on(Hls.Events.LEVEL_SWITCHED, (_, d) => updateHlsQualityBadge(window._storyHls, d.level));
+      window._storyHls = new Hls({ startLevel: -1, capLevelToPlayerSize: false });
+      window._storyHls.loadSource(url);
+      window._storyHls.attachMedia(video);
     }
-  } else { video.src = url; }
-  video.load(); video.play().catch(() => {}); setPPIcon(true);
+  } else {
+    video.src = url;
+  }
 
-  storyTimeHandler = () => {
-    const threshold = node.choiceAt ?? (video.duration ? video.duration - 4 : 99999);
+  video.load();
+
+  // Show UI on first canplay
+  if (!playerActive) {
+    video.addEventListener('canplay', function onFirstPlay() {
+      video.removeEventListener('canplay', onFirstPlay);
+      video.muted = false;
+      video.play().catch(function(){});
+      storyShowPlayer();
+      storySetupTrigger(node);
+    });
+    // Fallback: show UI anyway after 10s
+    setTimeout(function(){ if (!playerActive) { storyShowPlayer(); storySetupTrigger(node); } }, 10000);
+  } else {
+    video.muted = false;
+    video.play().catch(function(){});
+    storySetupTrigger(node);
+  }
+}
+
+function storySetupTrigger(node) {
+  if (node.isEnding) {
+    storyEndedHandler = function() { storyShowEnding(node); };
+    video.addEventListener('ended', storyEndedHandler, { once: true });
+    return;
+  }
+
+  var threshold = node.choiceAt != null ? node.choiceAt : 999;
+
+  storyTimeHandler = function() {
     if (video.currentTime >= threshold) {
-      video.removeEventListener('timeupdate', storyTimeHandler); storyTimeHandler = null;
-      if (node.isEnding) storyShowEnding(node); else storyShowChoice(node);
+      video.removeEventListener('timeupdate', storyTimeHandler);
+      storyTimeHandler = null;
+      storyShowChoice(node);
     }
   };
   video.addEventListener('timeupdate', storyTimeHandler);
 
-  storyEndedHandler = () => {
-    clearStoryTimer();
-    if (node.isEnding) { storyShowEnding(node); return; }
-    const defNext = node.defaultNext || node.choices?.[0]?.next;
-    if (defNext) storyTransition(storyData.nodes[defNext]);
+  storyEndedHandler = function() {
+    var def = node.defaultNext || (node.choices && node.choices[0] && node.choices[0].next);
+    if (def && storyData.nodes[def]) storyGoto(storyData.nodes[def]);
   };
   video.addEventListener('ended', storyEndedHandler, { once: true });
 }
 
 function storyShowChoice(node) {
   video.pause();
-  document.getElementById('story-question').textContent = node.question || 'Що робиш далі?';
-  const choicesEl = document.getElementById('story-choices');
+
+  document.getElementById('story-question').textContent = node.question || 'Що далі?';
+  var choicesEl = document.getElementById('story-choices');
   choicesEl.innerHTML = '';
-  (node.choices || []).forEach(ch => {
-    const btn = document.createElement('button');
+
+  (node.choices || []).forEach(function(ch) {
+    var btn = document.createElement('button');
     btn.className = 'story-choice-btn';
-    btn.innerHTML = '<div class="ch-ico">' + (ch.icon || '▶') + '</div><div class="ch-label">' + (ch.label || '') + (ch.sub ? '<span class="ch-sub">' + ch.sub + '</span>' : '') + '</div>';
-    btn.onclick = () => storyChoiceMade(ch.next);
+    btn.innerHTML = '<div class="ch-ico">' + (ch.icon || '▶') + '</div>'
+      + '<div class="ch-label">' + (ch.label || '') + (ch.sub ? '<span class="ch-sub">' + ch.sub + '</span>' : '') + '</div>';
+    btn.onclick = function() {
+      document.getElementById('story-overlay').classList.remove('show');
+      if (storyChoiceTimer) { clearInterval(storyChoiceTimer); storyChoiceTimer = null; }
+      if (ch.next && storyData.nodes[ch.next]) storyGoto(storyData.nodes[ch.next]);
+    };
     choicesEl.appendChild(btn);
   });
-  const countdown = node.countdown ?? 0;
-  const timerWrap = document.getElementById('story-timer-wrap');
-  const timerFill = document.getElementById('story-timer-fill');
-  const timerTxt  = document.getElementById('story-timer-txt');
+
+  // Timer
+  var countdown = node.countdown || 0;
+  var timerWrap = document.getElementById('story-timer-wrap');
+  var timerFill = document.getElementById('story-timer-fill');
+  var timerTxt  = document.getElementById('story-timer-txt');
+
   if (countdown > 0) {
     timerWrap.style.display = '';
-    timerFill.style.transition = 'none'; timerFill.style.width = '100%';
-    let rem = countdown; timerTxt.textContent = rem + ' сек...';
-    requestAnimationFrame(() => { timerFill.style.transition = 'width ' + countdown + 's linear'; timerFill.style.width = '0%'; });
-    storyChoiceTimer = setInterval(() => {
+    timerFill.style.transition = 'none';
+    timerFill.style.width = '100%';
+    var rem = countdown;
+    timerTxt.textContent = rem + ' сек...';
+    setTimeout(function() {
+      timerFill.style.transition = 'width ' + countdown + 's linear';
+      timerFill.style.width = '0%';
+    }, 50);
+    storyChoiceTimer = setInterval(function() {
       rem--;
       timerTxt.textContent = rem > 0 ? rem + ' сек...' : 'Авто...';
       if (rem <= 0) {
         clearInterval(storyChoiceTimer); storyChoiceTimer = null;
-        const defNext = node.defaultNext || node.choices?.[0]?.next;
-        if (defNext) storyChoiceMade(defNext);
+        document.getElementById('story-overlay').classList.remove('show');
+        var def = node.defaultNext || (node.choices && node.choices[0] && node.choices[0].next);
+        if (def && storyData.nodes[def]) storyGoto(storyData.nodes[def]);
       }
     }, 1000);
-  } else { timerWrap.style.display = 'none'; }
+  } else {
+    timerWrap.style.display = 'none';
+  }
+
   document.getElementById('story-overlay').classList.add('show');
 }
 
-function storyChoiceMade(nextId) {
-  clearStoryTimer();
-  document.getElementById('story-overlay').classList.remove('show');
-  if (!nextId || !storyData) return;
-  const nextNode = storyData.nodes[nextId];
-  if (nextNode) storyTransition(nextNode);
-}
-
-function storyTransition(node) {
-  const fade = document.getElementById('story-fade');
-  const titleEl = document.getElementById('scene-title');
+function storyGoto(node) {
+  var fade = document.getElementById('story-fade');
+  var titleEl = document.getElementById('scene-title');
   fade.classList.add('in');
-  setTimeout(() => {
+  setTimeout(function() {
     if (node.label) { titleEl.textContent = node.label; titleEl.classList.add('show'); }
-    storyLoadVideoForNode(node);
+    storyPlayNode(node);
   }, 500);
-  setTimeout(() => { titleEl.classList.remove('show'); fade.classList.remove('in'); }, 1600);
+  setTimeout(function() { titleEl.classList.remove('show'); fade.classList.remove('in'); }, 1600);
 }
 
 function storyShowEnding(node) {
-  const fade = document.getElementById('story-fade');
+  var fade = document.getElementById('story-fade');
   fade.classList.add('in');
-  setTimeout(() => {
+  setTimeout(function() {
     if (video) video.pause();
     playerActive = false;
     document.getElementById('canvas').classList.remove('active');
     document.getElementById('topbar').classList.remove('show');
     document.getElementById('hud').classList.remove('show');
-    const splash = document.getElementById('splash');
+    var splash = document.getElementById('splash');
     splash.querySelector('.splash-inner').innerHTML =
       '<div class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>VR KINGS</div>'
-    + '<h1 class="splash-title">' + (node.endTitle || 'Кінець') + '</h1>'
-    + '<p class="splash-sub" style="margin-bottom:2.6rem">' + (node.endDesc || 'Ти пройшов цю гілку сюжету.') + '</p>'
-    + '<div class="btn-row-splash"><button class="btn-watch" onclick="storyRestart()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg><span>Почати спочатку</span></button></div>';
+      + '<h1 class="splash-title">' + (node.endTitle || 'Кінець') + '</h1>'
+      + '<p class="splash-sub" style="margin-bottom:2.6rem">' + (node.endDesc || '') + '</p>'
+      + '<div class="btn-row-splash"><button class="btn-watch" onclick="storyRestart()"><span>↺ Спочатку</span></button></div>';
     splash.classList.remove('hide');
     fade.classList.remove('in');
   }, 600);
@@ -1023,60 +1105,12 @@ function storyShowEnding(node) {
 function storyRestart() {
   document.getElementById('splash').classList.add('hide');
   document.getElementById('loading').classList.add('on');
-  playerActive = true;
-  document.getElementById('canvas').classList.add('active');
-  document.getElementById('topbar').classList.add('show');
-  document.getElementById('hud').classList.add('show');
-  const startId = storyData.start || Object.keys(storyData.nodes)[0];
-  storyLoadVideoForNode(storyData.nodes[startId]);
-  setTimeout(() => { document.getElementById('loading').classList.add('fade'); setTimeout(() => document.getElementById('loading').classList.remove('on','fade'), 700); }, 600);
+  playerActive = false;
+  var startId = storyData.start || Object.keys(storyData.nodes)[0];
+  storyPlayNode(storyData.nodes[startId]);
+  setTimeout(function() {
+    document.getElementById('loading').classList.add('fade');
+    setTimeout(function(){ document.getElementById('loading').classList.remove('on','fade'); }, 700);
+  }, 500);
 }
-
-function clearStoryTimer() {
-  if (storyChoiceTimer) { clearInterval(storyChoiceTimer); storyChoiceTimer = null; }
-}
-
-// Patch launch() for story mode
-const _origLaunchFn = window.launch;
-window.launch = function() {
-  if (loadStory() && storyData) {
-    document.getElementById('splash').classList.add('hide');
-    document.getElementById('loading').classList.add('on');
-
-    // Init Three.js — but stop it from loading VIDEO_URL (there is none)
-    initThree();
-    // Immediately stop the video initThree created (it has no src in story mode)
-    if (video) { video.pause(); video.src = ''; }
-
-    const startId = storyData.start || Object.keys(storyData.nodes)[0];
-    const firstNode = storyData.nodes[startId];
-
-    // Load first story node
-    storyLoadVideoForNode(firstNode);
-
-    // Show player UI once video can play
-    const onReady = () => {
-      document.getElementById('loading').classList.add('fade');
-      setTimeout(() => document.getElementById('loading').classList.remove('on','fade'), 700);
-      document.getElementById('canvas').classList.add('active');
-      document.getElementById('topbar').classList.add('show');
-      document.getElementById('hud').classList.add('show');
-      playerActive = true;
-      showHint();
-    };
-
-    // canplay may already have fired — check readyState
-    if (video && video.readyState >= 3) {
-      onReady();
-    } else if (video) {
-      video.addEventListener('canplay', onReady, { once: true });
-      // Fallback timeout in case canplay doesn't fire
-      setTimeout(() => {
-        if (!playerActive) onReady();
-      }, 5000);
-    }
-  } else {
-    if (_origLaunchFn) _origLaunchFn();
-  }
-};
 </script>

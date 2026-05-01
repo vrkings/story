@@ -896,7 +896,8 @@ function loadStory() {
   try {
     // Decode: admin encodes with btoa(unescape(encodeURIComponent(json)))
     // So each byte in atob(raw) is a percent-encoded UTF-8 byte
-    const pct = atob(raw).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('');
+    const fixed = raw.replace(/ /g, '+');
+    const pct = atob(fixed).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('');
     storyData = JSON.parse(decodeURIComponent(pct));
     return true;
   } catch(e) { console.warn('Story parse error', e); return false; }

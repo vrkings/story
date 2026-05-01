@@ -611,7 +611,8 @@ function generateStoryLink() {
 
   const json = buildStoryJSON();
   const jsonStr = JSON.stringify(json);
-  const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+  // UTF-8 safe base64 encode
+  const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode('0x' + p1)));
   const url = base + '/index.html?story=' + b64;
 
   document.getElementById('story-url-out').textContent = url;

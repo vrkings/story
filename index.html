@@ -900,11 +900,8 @@ function loadStory() {
   if (!raw) return false;
   try {
     // Safari-safe base64 decode — pad and fix URL-safe chars
-    const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
-    const decoded = decodeURIComponent(Array.from(atob(padded)).map(c =>
-      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-    ).join(''));
+    // Decode: reverse of encodeURIComponent-based btoa
+    const decoded = decodeURIComponent(atob(raw));
     storyData = JSON.parse(decoded);
     return true;
   } catch(e) { console.warn('Story parse error', e); return false; }

@@ -1008,8 +1008,8 @@ function storyShowEnding(node) {
     splash.querySelector('.splash-inner').innerHTML =
       '<div class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>VR KINGS</div>'
     + '<h1 class="splash-title">' + (node.endTitle || 'Кінець') + '</h1>'
-    + '<p class="splash-sub" style="margin-bottom:2.6rem">' + (node.endDesc || 'Ти пройшов цю гілку сюжету.') + '</p>'
-    + '<div class="btn-row-splash"><button class="btn-watch" onclick="storyRestart()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg><span>Почати спочатку</span></button></div>';
+    + '<p class="splash-sub" style="margin-bottom:2.6rem">' + (node.endDesc || 'You completed this story branch.') + '</p>'
+    + '<div class="btn-row-splash"><button class="btn-watch" onclick="storyRestart()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg><span>Watch again</span></button></div>';
     splash.classList.remove('hide');
     fade.classList.remove('in');
   }, 600);
